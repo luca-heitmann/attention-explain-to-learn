@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>2.1 Model architecture · Explain to learn</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-topic="2.1" data-root="../">
+<header class="topbar"><div class="wrap">
+  <a class="brand" href="../index.html">Explain <span>to learn</span></a>
+  <span class="crumbs">/ 2 Attention Is All You Need / <b>2.1 Model architecture</b></span>
+  <span class="spacer"></span>
+  <button class="iconbtn" id="quizbtn" aria-pressed="false" title="Hide answers to test yourself">Self-test</button>
+  <button class="iconbtn" data-action="theme" title="Toggle light/dark" aria-label="Toggle light/dark">◐</button>
+</div></header>
+
+<div class="wrap page">
+<article>
+  <h1><span class="num">2.1</span>Model architecture: encoder and decoder stacks</h1>
+  <p class="lead">How the original Transformer from <a href="https://arxiv.org/abs/1706.03762">Vaswani et al. (2017)</a> is put together – component by component. Section references point to the paper.</p>
+
+  <section id="summary">
+    <div class="box check">
+      <p class="label">The gist in 60 seconds</p>
+      <ol>
+        <li>No recurrence, no convolutions – <b>only attention</b>. So all positions are processed in parallel.</li>
+        <li>An <b>encoder</b> turns the input sentence into one vector per token; a <b>decoder</b> generates the output one token at a time.</li>
+        <li>Encoder layer = <b>self-attention</b> + <b>feed-forward</b>. Decoder layer = <b>masked self-attention</b> + <b>encoder–decoder attention</b> + <b>feed-forward</b>. Each sub-layer is wrapped in <b>residual + LayerNorm</b>.</li>
+        <li>Both stacks have <b>N = 6</b> layers; every vector has size <b>d<sub>model</sub> = 512</b>.</li>
+        <li>Token embeddings + <b>positional encodings</b> go in at the bottom; <b>linear + softmax</b> produce next-token probabilities at the top.</li>
+      </ol>
+    </div>
+  </section>
+
+  <section id="idea">
+    <h2><span class="num">2.1.1</span>Core idea</h2>
+    <p>Before 2017, strong sequence models were RNNs (optionally with attention, see topic 1.2) or CNNs. RNNs compute step <i>t</i> from step <i>t−1</i>, so they cannot be parallelised within a sequence, and information between distant words has to travel through many steps.</p>
+    <p>The paper proposes an architecture “based solely on attention mechanisms, dispensing with recurrence and convolutions entirely” (Abstract). Consequences:</p>
+    <ul>
+      <li><b>Parallel</b> computation over all positions → much faster training.</li>
+      <li>Any two positions are connected by a <b>constant</b> number of operations → long-range dependencies are easier to learn (more in 2.5).</li>
+    </ul>
+  </section>
+
+  <section id="overview">
+    <h2><span class="num">2.1.2</span>Encoder–decoder overview</h2>
+    <p>The task in the paper is machine translation. The <b>encoder</b> maps the input tokens <math><mo>(</mo><msub><mi>x</mi><mn>1</mn></msub><mo>,</mo><mo>…</mo><mo>,</mo><msub><mi>x</mi><mi>n</mi></msub><mo>)</mo></math> to continuous representations <math><mi>z</mi><mo>=</mo><mo>(</mo><msub><mi>z</mi><mn>1</mn></msub><mo>,</mo><mo>…</mo><mo>,</mo><msub><mi>z</mi><mi>n</mi></msub><mo>)</mo></math>. The <b>decoder</b> then produces <math><mo>(</mo><msub><mi>y</mi><mn>1</mn></msub><mo>,</mo><mo>…</mo><mo>,</mo><msub><mi>y</mi><mi>m</mi></msub><mo>)</mo></math> one symbol at a time. It is <b>auto-regressive</b>: every generated token is fed back in as input for the next step.</p>
+    <p>Click a block to see what it does. <b>Self-test</b> (top right) hides the labels – try naming all 18 blocks.</p>
+    <figure>
+      <div class="arch wide">
+        <svg id="archsvg" viewBox="0 0 560 680" role="img" aria-label="Transformer: encoder stack on the left, decoder stack on the right, read from bottom to top">
+          <defs><marker id="au" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--faint)"/></marker></defs>
+          <rect class="loopbox" x="28" y="298" width="224" height="200" rx="12"/>
+          <rect class="loopbox" x="308" y="140" width="224" height="318" rx="12"/>
+          <text class="note" x="36" y="292">Encoder · N = 6</text>
+          <text class="note" x="316" y="472">Decoder · N = 6</text>
+          <path class="flow" marker-end="url(#au)" d="M140,630 V613 M140,575 V558 M140,520 V490 M140,452 V443 M140,405 V398 M140,360 V348
+            M420,630 V613 M420,575 V558 M420,520 V448 M420,410 V398 M420,360 V343 M420,305 V293 M420,255 V238 M420,200 V188 M420,150 V123 M420,85 V68"/>
+          <path class="flow" marker-end="url(#au)" d="M140,310 V272 H285 V323 H318"/>
+          <text class="note" x="150" y="266">z → keys &amp; values</text>
+          <text class="note" x="420" y="16" text-anchor="middle">Output probabilities</text>
+        </svg>
+        <div class="arch-panel" id="archpanel" aria-live="polite">
+          <p class="label">Component</p>
+          <h3>Click a block</h3>
+          <p class="small muted">Read the diagram from the bottom (inputs) to the top (output probabilities). Every “Add &amp; Norm” is a residual connection followed by layer normalisation.</p>
+        </div>
+      </div>
+      <figcaption>Own drawing after Figure 1 of the paper. Residual connections are omitted for readability.</figcaption>
+    </figure>
+
+    <h3>Short answer: component → purpose</h3>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Component</th><th>Purpose (one sentence)</th></tr></thead>
+      <tbody>
+        <tr><td>Input / output embedding</td><td class="reveal">Map token IDs to learned vectors of size d<sub>model</sub>.</td></tr>
+        <tr><td>Positional encoding</td><td class="reveal">Add order information, since attention itself ignores order.</td></tr>
+        <tr><td>Multi-head self-attention (encoder)</td><td class="reveal">Every input token gathers information from all input tokens.</td></tr>
+        <tr><td>Masked multi-head self-attention (decoder)</td><td class="reveal">Every output token gathers information from earlier output tokens only.</td></tr>
+        <tr><td>Encoder–decoder attention</td><td class="reveal">Decoder queries look up relevant source tokens (keys/values = encoder output).</td></tr>
+        <tr><td>Add &amp; Norm</td><td class="reveal">Residual keeps information and gradients flowing; LayerNorm stabilises training.</td></tr>
+        <tr><td>Feed-forward</td><td class="reveal">Per-position two-layer MLP with ReLU – non-linear processing of each token.</td></tr>
+        <tr><td>Linear + softmax</td><td class="reveal">Turn the decoder output into a probability distribution over the vocabulary.</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section id="encoder">
+    <h2><span class="num">2.1.3</span>Encoder layer</h2>
+    <p>The encoder is a stack of <b>N = 6 identical layers</b> (Section 3.1). Each layer has two sub-layers:</p>
+    <ol>
+      <li><b>Multi-head self-attention</b> – each token attends to every token of the input (details: 2.2, 2.3).</li>
+      <li><b>Position-wise feed-forward network</b> (2.1.5).</li>
+    </ol>
+    <p>Each sub-layer is wrapped in a <b>residual connection</b> followed by <b>layer normalisation</b>:</p>
+    <div class="fml">
+      <math display="block"><mtext>output</mtext><mo>=</mo><mi>LayerNorm</mi><mo>(</mo><mi>x</mi><mo>+</mo><mi>Sublayer</mi><mo>(</mo><mi>x</mi><mo>)</mo><mo>)</mo></math>
+      <span class="cap">Because <i>x</i> is added to the sub-layer output, all sub-layers and embeddings produce vectors of the same size, d<sub>model</sub> = 512.</span>
+    </div>
+    <div class="box tip"><b>Why residual + norm?</b> The residual path lets a sub-layer learn only a <i>change</i> to its input and gives gradients a direct route through 6 layers. LayerNorm keeps activation scales stable. Together they make deep stacks trainable.</div>
+  </section>
+
+  <section id="decoder">
+    <h2><span class="num">2.1.4</span>Decoder layer &amp; masking</h2>
+    <p>The decoder also has <b>N = 6</b> layers, but with <b>three</b> sub-layers, each with residual + LayerNorm:</p>
+    <ol>
+      <li><b>Masked multi-head self-attention</b> over the output tokens produced so far.</li>
+      <li><b>Encoder–decoder attention</b>: <b>queries</b> come from the decoder, <b>keys and values</b> from the encoder output <i>z</i>. This is where the translation “looks at” the source sentence.</li>
+      <li><b>Feed-forward network</b>.</li>
+    </ol>
+    <p><b>Why the mask?</b> During training the whole target sentence is fed in at once, for speed. Without a mask, position <i>i</i> could simply look at token <i>i</i> and copy it. The mask blocks attention to later positions. Together with shifting the output embeddings right by one, the prediction for position <i>i</i> can only depend on positions <b>before</b> <i>i</i> – exactly the situation during generation.</p>
+    <figure>
+      <div class="fig-toolbar"><b class="grow">Causal mask: which tokens may each position attend to?</b><span class="small muted">Click a row</span></div>
+      <div id="mask" class="mask-grid"></div>
+      <figcaption>Rows = querying position, columns = positions it may attend to (blue). In the implementation the blocked entries are set to −∞ before the softmax, so they get weight 0.</figcaption>
+    </figure>
+  </section>
+
+  <section id="ffn">
+    <h2><span class="num">2.1.5</span>Position-wise feed-forward network</h2>
+    <div class="fml">
+      <math display="block"><mi>FFN</mi><mo>(</mo><mi>x</mi><mo>)</mo><mo>=</mo><mi>max</mi><mo>(</mo><mn>0</mn><mo>,</mo><mi>x</mi><msub><mi>W</mi><mn>1</mn></msub><mo>+</mo><msub><mi>b</mi><mn>1</mn></msub><mo>)</mo><msub><mi>W</mi><mn>2</mn></msub><mo>+</mo><msub><mi>b</mi><mn>2</mn></msub></math>
+      <span class="cap">Two linear layers with a ReLU in between. 512 → 2048 → 512 dimensions (d<sub>ff</sub> = 2048).</span>
+    </div>
+    <p>“Position-wise” means that the <b>same</b> network is applied to <b>every token separately</b>. Attention mixes information <i>between</i> tokens; the FFN processes each token <i>on its own</i>. The weights are shared across positions but differ from layer to layer.</p>
+  </section>
+
+  <section id="embeddings">
+    <h2><span class="num">2.1.6</span>Embeddings, linear &amp; softmax</h2>
+    <p>Learned <b>embeddings</b> turn input and output tokens into vectors of size d<sub>model</sub>. At the top of the decoder, a <b>linear layer</b> projects each vector to one score (logit) per vocabulary token, and a <b>softmax</b> turns the scores into probabilities:</p>
+    <div class="fml">
+      <math display="block"><mi>softmax</mi><msub><mrow><mo>(</mo><mi>z</mi><mo>)</mo></mrow><mi>i</mi></msub><mo>=</mo><mfrac><msup><mi>e</mi><msub><mi>z</mi><mi>i</mi></msub></msup><mrow><msub><mo>∑</mo><mi>j</mi></msub><msup><mi>e</mi><msub><mi>z</mi><mi>j</mi></msub></msup></mrow></mfrac></math>
+      <span class="cap">Example: <i>z</i> = (2, 1, 0) → (0.67, 0.24, 0.09).</span>
+    </div>
+    <p><b>Detail from Section 3.4:</b> the two embedding layers and the pre-softmax linear layer <b>share one weight matrix</b>, and the embedding weights are multiplied by <math><msqrt><msub><mi>d</mi><mtext>model</mtext></msub></msqrt></math>.</p>
+  </section>
+
+  <section id="pe">
+    <h2><span class="num">2.1.7</span>Where positional encodings enter</h2>
+    <p>Attention treats its input as an unordered <i>set</i>. So “dog bites man” and “man bites dog” would look identical. Therefore a <b>positional encoding</b> is <b>added</b> to the embeddings at the bottom of <b>both</b> stacks. The paper uses fixed sine/cosine functions of different frequencies – the formula and intuition are topic <b>2.4</b>.</p>
+  </section>
+
+  <section id="hyper">
+    <h2><span class="num">2.1.8</span>Base model hyperparameters</h2>
+    <div class="tablewrap"><table>
+      <thead><tr><th></th><th>N</th><th>d<sub>model</sub></th><th>d<sub>ff</sub></th><th>h</th><th>d<sub>k</sub> = d<sub>v</sub></th><th>dropout</th><th>params</th></tr></thead>
+      <tbody>
+        <tr><td><b>base</b></td><td>6</td><td>512</td><td>2048</td><td>8</td><td>64</td><td>0.1</td><td>≈ 65M</td></tr>
+        <tr><td><b>big</b></td><td>6</td><td>1024</td><td>4096</td><td>16</td><td>64</td><td>0.3</td><td>≈ 213M</td></tr>
+      </tbody>
+    </table></div>
+    <p class="small muted">From Table 3 of the paper. Useful sanity check: h · d<sub>k</sub> = 8 · 64 = 512 = d<sub>model</sub>.</p>
+  </section>
+
+  <section id="questions">
+    <h2>Questions to be able to answer</h2>
+    <div class="box exam" id="tp-questions"></div>
+  </section>
+
+  <section id="keypoints">
+    <h2>Key points &amp; progress</h2>
+    <p class="muted small">Your agent checks these when you explain the topic. In self-test mode the model answers are blurred (click to reveal).</p>
+    <div class="kps" id="tp-keypoints"></div>
+  </section>
+
+  <section id="log">
+    <h2>Check log</h2>
+    <div class="card" id="tp-log"></div>
+  </section>
+</article>
+
+<aside class="side">
+  <div class="card" id="tp-status"></div>
+  <div class="card small">
+    <p class="label">Start a check</p>
+    Tell your agent: <code>Check me on 2.1</code> and explain the topic freely. Single point: <code>Check me on 2.1.4</code>.
+  </div>
+  <nav class="card">
+    <p class="label">Contents</p>
+    <a href="#summary">The gist</a>
+    <a href="#idea">2.1.1 Core idea</a>
+    <a href="#overview">2.1.2 Overview &amp; diagram</a>
+    <a href="#encoder">2.1.3 Encoder layer</a>
+    <a href="#decoder">2.1.4 Decoder &amp; masking</a>
+    <a href="#ffn">2.1.5 Feed-forward</a>
+    <a href="#embeddings">2.1.6 Embeddings &amp; softmax</a>
+    <a href="#pe">2.1.7 Positional encoding</a>
+    <a href="#hyper">2.1.8 Hyperparameters</a>
+    <a href="#keypoints">Key points</a>
+    <a href="#log">Check log</a>
+  </nav>
+</aside>
+</div>
+
+<script src="../data/progress.js"></script>
+<script src="../assets/app.js"></script>
+<script>
+(function () {
+  const svgNS = "http://www.w3.org/2000/svg";
+
+  // ---------- Architecture diagram ----------
+  const E = 40, DX = 320, W = 200;
+  const BLOCKS = [
+    { x: E, y: 630, label: "Inputs", fill: "--card", kp: "2.1.2", what: "Source sentence as token IDs.", more: "E.g. the English sentence to translate." },
+    { x: E, y: 575, label: "Input embedding", fill: "--blk-embed", kp: "2.1.6", what: "Token ID → learned vector (d_model = 512).", more: "Shares its weights with the output embedding and the final linear layer." },
+    { x: E, y: 520, label: "+ Positional encoding", fill: "--blk-embed", kp: "2.1.7", what: "Adds order information.", more: "Fixed sinusoids, added element-wise (topic 2.4)." },
+    { x: E, y: 452, label: "Multi-head self-attention", fill: "--blk-attn", kp: "2.1.3", what: "Each input token gathers information from all input tokens.", more: "8 heads in parallel (topic 2.3)." },
+    { x: E, y: 405, label: "Add & Norm", fill: "--blk-norm", kp: "2.1.3", what: "LayerNorm(x + Sublayer(x)).", more: "Residual connection + layer normalisation." },
+    { x: E, y: 360, label: "Feed-forward", fill: "--blk-ffn", kp: "2.1.5", what: "Per-position two-layer MLP with ReLU.", more: "512 → 2048 → 512." },
+    { x: E, y: 310, label: "Add & Norm", fill: "--blk-norm", kp: "2.1.3", what: "LayerNorm(x + Sublayer(x)).", more: "Output of the top encoder layer = z, used by every decoder layer." },
+    { x: DX, y: 630, label: "Outputs (shifted right)", fill: "--card", kp: "2.1.4", what: "Target tokens generated so far.", more: "Shifted by one position so that position i only sees tokens before i." },
+    { x: DX, y: 575, label: "Output embedding", fill: "--blk-embed", kp: "2.1.6", what: "Token ID → learned vector.", more: "Same weight matrix as the input embedding." },
+    { x: DX, y: 520, label: "+ Positional encoding", fill: "--blk-embed", kp: "2.1.7", what: "Adds order information.", more: "Same sinusoids as in the encoder." },
+    { x: DX, y: 410, label: "Masked self-attention", fill: "--blk-attn", kp: "2.1.4", what: "Output tokens attend to earlier output tokens only.", more: "Future positions are masked (set to −∞ before softmax)." },
+    { x: DX, y: 360, label: "Add & Norm", fill: "--blk-norm", kp: "2.1.3", what: "Residual + LayerNorm.", more: "Same wrapper as in the encoder." },
+    { x: DX, y: 305, label: "Encoder–decoder attention", fill: "--blk-attn", kp: "2.1.4", what: "Decoder queries attend over the encoder output.", more: "Q from the decoder, K and V from z." },
+    { x: DX, y: 255, label: "Add & Norm", fill: "--blk-norm", kp: "2.1.3", what: "Residual + LayerNorm.", more: "" },
+    { x: DX, y: 200, label: "Feed-forward", fill: "--blk-ffn", kp: "2.1.5", what: "Per-position two-layer MLP with ReLU.", more: "" },
+    { x: DX, y: 150, label: "Add & Norm", fill: "--blk-norm", kp: "2.1.3", what: "Residual + LayerNorm.", more: "" },
+    { x: DX, y: 85, label: "Linear", fill: "--blk-out", kp: "2.1.6", what: "Project to vocabulary size → logits.", more: "One score per possible next token." },
+    { x: DX, y: 30, label: "Softmax", fill: "--blk-out", kp: "2.1.6", what: "Logits → probability distribution.", more: "The next token is chosen from this distribution." }
+  ];
+  const svg = document.getElementById("archsvg"), panel = document.getElementById("archpanel");
+  let quiz = false;
+  BLOCKS.forEach((b, i) => {
+    const g = document.createElementNS(svgNS, "g");
+    g.setAttribute("class", "blk"); g.setAttribute("tabindex", "0"); g.setAttribute("role", "button");
+    g.innerHTML = `<rect x="${b.x}" y="${b.y}" width="${W}" height="36" rx="8" fill="var(${b.fill})"/><text x="${b.x + W / 2}" y="${b.y + 23}" text-anchor="middle"></text>`;
+    b.el = g; b.nr = i + 1;
+    const show = () => {
+      BLOCKS.forEach((x) => x.el.classList.remove("on")); g.classList.add("on");
+      b.revealed = true; label(b);
+      const k = ETL.keypoint(b.kp);
+      panel.innerHTML = `<p class="label">Component ${b.nr}</p><h3>${ETL.esc(b.label)}</h3>
+        <p><b>Purpose:</b> ${ETL.esc(b.what)}</p>${b.more ? `<p class="small">${ETL.esc(b.more)}</p>` : ""}
+        ${k ? `<p class="small"><a href="#kp-${k.id}"><span class="kid">${k.id}</span>${ETL.esc(k.title)}</a> ${ETL.badge(k.status)}</p>` : ""}`;
+      if (innerWidth < 720) panel.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    };
+    g.addEventListener("click", show);
+    g.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); show(); } });
+    svg.appendChild(g); label(b);
+  });
+  function label(b) {
+    const t = b.el.querySelector("text"), hide = quiz && !b.revealed;
+    t.textContent = hide ? `${b.nr}  ?` : b.label;
+    t.classList.toggle("hidden-label", hide);
+  }
+
+  // ---------- Self-test ----------
+  const qb = document.getElementById("quizbtn");
+  qb.addEventListener("click", () => {
+    quiz = !quiz; qb.setAttribute("aria-pressed", quiz);
+    document.body.classList.toggle("quiz-hide", quiz);
+    BLOCKS.forEach((b) => { b.revealed = false; b.el.classList.remove("on"); label(b); });
+    panel.innerHTML = quiz ? `<p class="label">Self-test</p><h3>Name blocks 1–${BLOCKS.length}</h3><p class="small muted">Say name and purpose out loud, then click to check.</p>`
+      : `<p class="label">Component</p><h3>Click a block</h3>`;
+  });
+  document.addEventListener("click", (e) => { const r = e.target.closest(".quiz-hide .reveal"); if (r) r.classList.remove("reveal"); });
+
+  // ---------- Causal mask ----------
+  const TOK = ["<s>", "the", "cat", "sat", "down"], n = TOK.length, grid = document.getElementById("mask");
+  grid.style.gridTemplateColumns = `4.5rem repeat(${n}, 1fr)`;
+  let sel = null;
+  function drawMask() {
+    let h = `<span class="lbl"></span>` + TOK.map((t) => `<span class="lbl">${ETL.esc(t)}</span>`).join("");
+    for (let r = 0; r < n; r++) {
+      h += `<button aria-pressed="${sel === r}" data-r="${r}">${ETL.esc(TOK[r])}</button>`;
+      for (let c = 0; c < n; c++) {
+        const ok = c <= r, active = sel === null || sel === r;
+        h += `<span class="${ok && active ? "ok" : ""} ${sel === r ? "row" : ""}" title="${TOK[r]} → ${TOK[c]}: ${ok ? "allowed" : "masked"}">${ok ? "✓" : "–"}</span>`;
+      }
+    }
+    grid.innerHTML = h;
+  }
+  grid.addEventListener("click", (e) => { const b = e.target.closest("button"); if (!b) return; sel = sel === +b.dataset.r ? null : +b.dataset.r; drawMask(); });
+  drawMask();
+})();
+</script>
+</body>
+</html>

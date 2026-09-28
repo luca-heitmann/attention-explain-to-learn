@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Explain to learn – Attention & Transformers</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body data-page="index" data-root="">
+<header class="topbar"><div class="wrap">
+  <a class="brand" href="index.html">Explain <span>to learn</span></a>
+  <span class="spacer"></span>
+  <a class="iconbtn" href="#log-h" style="display:grid;place-items:center;text-decoration:none">Log</a>
+  <button class="iconbtn" data-action="theme" title="Toggle light/dark" aria-label="Toggle light/dark">◐</button>
+</div></header>
+
+<main class="wrap">
+  <h1>Attention &amp; Transformers – learning from the papers</h1>
+  <p class="lead">Every topic is numbered so you can refer to it. Read a topic page, explain it to your AI agent in your own words, and the agent checks each key point and updates this page.</p>
+
+  <div id="hero" class="hero"></div>
+
+  <div class="box tip small">
+    <b>Loop:</b> ① open a topic and read it · ② tell your agent <code>Check me on 2.1</code> and explain freely (typing or dictation) · ③ answer its follow-up questions · ④ reload – your progress and feedback show up here. New topic page: <code>Prepare topic 2.2</code>.
+  </div>
+
+  <h2>Topics</h2>
+  <div id="topics"></div>
+
+  <h2 id="log-h">Recent checks</h2>
+  <div id="log" class="card"></div>
+
+  <footer class="foot">Data: <code>site/data/progress.js</code> · Legend: <span class="st mastered">mastered</span> <span class="st partial">partial</span> <span class="st wrong">misconception</span> <span class="st open">open</span> · Explanations and diagrams are original; the papers are linked, not redistributed.</footer>
+</main>
+
+<script src="data/progress.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

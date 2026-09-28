@@ -1,0 +1,5 @@
+# Source material stays local (copyright). Only the helper files are tracked.
+sources/*
+!sources/README.md
+!sources/fetch-papers.sh
+.DS_Store
