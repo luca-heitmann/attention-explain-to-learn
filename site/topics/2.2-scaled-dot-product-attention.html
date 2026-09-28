@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>2.2 Scaled dot-product attention · Explain to learn</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-topic="2.2" data-root="../">
+<header class="topbar"><div class="wrap">
+  <a class="brand" href="../index.html">Explain <span>to learn</span></a>
+  <span class="crumbs">/ 2 Attention Is All You Need / <b>2.2 Scaled dot-product attention</b></span>
+  <span class="spacer"></span>
+  <button class="iconbtn" id="quizbtn" aria-pressed="false" title="Hide answers to test yourself">Self-test</button>
+  <button class="iconbtn" data-action="theme" title="Toggle light/dark" aria-label="Toggle light/dark">◐</button>
+</div></header>
+
+<div class="wrap page">
+<article>
+  <h1><span class="num">2.2</span>Scaled dot-product attention</h1>
+  <p class="lead">The one operation the whole Transformer is built from – Section 3.2.1 and Figure 2 (left) of <a href="https://arxiv.org/abs/1706.03762">Vaswani et al. (2017)</a>. Where it sits in the model: topic <a href="2.1-model-architecture.html">2.1</a>.</p>
+
+  <section id="summary">
+    <div class="box check">
+      <p class="label">The gist in 60 seconds</p>
+      <ol>
+        <li>Every position produces a <b>query</b> (what am I looking for?), a <b>key</b> (what do I offer?) and a <b>value</b> (what do I pass on?).</li>
+        <li>Score = <b>dot product</b> of a query with every key. High score = good match.</li>
+        <li><b>Divide by √d<sub>k</sub></b>, then <b>softmax</b> → non-negative weights that sum to 1.</li>
+        <li>Output = <b>weighted sum of the values</b>: a soft lookup instead of picking one entry.</li>
+        <li>All queries at once: <math><mi>Attention</mi><mo>(</mo><mi>Q</mi><mo>,</mo><mi>K</mi><mo>,</mo><mi>V</mi><mo>)</mo><mo>=</mo><mi>softmax</mi><mo>(</mo><mfrac><mrow><mi>Q</mi><msup><mi>K</mi><mi>T</mi></msup></mrow><msqrt><msub><mi>d</mi><mi>k</mi></msub></msqrt></mfrac><mo>)</mo><mi>V</mi></math></li>
+      </ol>
+    </div>
+  </section>
+
+  <section id="qkv">
+    <h2><span class="num">2.2.1</span>Query, key, value</h2>
+    <p>The paper describes attention as “mapping a query and a set of key-value pairs to an output” (Section 3.2). The database analogy helps:</p>
+    <div class="tablewrap"><table>
+      <thead><tr><th></th><th>Analogy</th><th>In the model</th></tr></thead>
+      <tbody>
+        <tr><td><b>Query</b> <i>q</i></td><td class="reveal">The search request</td><td class="reveal">What this position wants to know about the rest of the sequence</td></tr>
+        <tr><td><b>Key</b> <i>k</i></td><td class="reveal">The label on a drawer</td><td class="reveal">What the position at the other end advertises about itself</td></tr>
+        <tr><td><b>Value</b> <i>v</i></td><td class="reveal">The content of the drawer</td><td class="reveal">The information that is actually handed over if the match is good</td></tr>
+      </tbody>
+    </table></div>
+    <p>Unlike a database lookup, nothing is selected hard. Every value contributes, weighted by how well its key matches the query – therefore <b>soft</b> lookup.</p>
+    <div class="box tip"><b>Where do Q, K, V come from?</b> From learned linear projections of the layer input (details in 2.3). In <b>self-attention</b> all three come from the same sequence; in the decoder's <b>encoder–decoder attention</b> the queries come from the decoder and the keys and values from the encoder output (see 2.1.4).</div>
+  </section>
+
+  <section id="formula">
+    <h2><span class="num">2.2.2</span>The formula</h2>
+    <div class="fml">
+      <math display="block"><mi>Attention</mi><mo>(</mo><mi>Q</mi><mo>,</mo><mi>K</mi><mo>,</mo><mi>V</mi><mo>)</mo><mo>=</mo><mi>softmax</mi><mrow><mo>(</mo><mfrac><mrow><mi>Q</mi><msup><mi>K</mi><mi>T</mi></msup></mrow><msqrt><msub><mi>d</mi><mi>k</mi></msub></msqrt></mfrac><mo>)</mo></mrow><mi>V</mi></math>
+      <span class="cap">Equation (1) of the paper. Queries and keys have dimension d<sub>k</sub>, values d<sub>v</sub>.</span>
+    </div>
+    <p>Reading it as shapes makes it concrete – <i>n</i> queries, <i>m</i> key-value pairs:</p>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Step</th><th>Shape</th><th>What happens</th></tr></thead>
+      <tbody>
+        <tr><td><i>Q</i>, <i>K</i>, <i>V</i></td><td><i>n</i>×d<sub>k</sub>, <i>m</i>×d<sub>k</sub>, <i>m</i>×d<sub>v</sub></td><td class="reveal">One row per position.</td></tr>
+        <tr><td><i>QK</i><sup>T</sup></td><td><i>n</i>×<i>m</i></td><td class="reveal">Score matrix: row <i>i</i>, column <i>j</i> = how well query <i>i</i> matches key <i>j</i>.</td></tr>
+        <tr><td>÷ √d<sub>k</sub></td><td><i>n</i>×<i>m</i></td><td class="reveal">Rescaling, see 2.2.4.</td></tr>
+        <tr><td>softmax</td><td><i>n</i>×<i>m</i></td><td class="reveal"><b>Row-wise</b>, i.e. over the keys: every row is non-negative and sums to 1.</td></tr>
+        <tr><td>· <i>V</i></td><td><i>n</i>×d<sub>v</sub></td><td class="reveal">Each row becomes a weighted sum of the value rows – one output vector per query.</td></tr>
+      </tbody>
+    </table></div>
+
+    <h3>Worked example by hand (d<sub>k</sub> = d<sub>v</sub> = 2, one query)</h3>
+    <p>Query <i>q</i> = (2, 1), three key-value pairs:</p>
+    <div class="tablewrap"><table>
+      <thead><tr><th>j</th><th>k<sub>j</sub></th><th>v<sub>j</sub></th><th>q·k<sub>j</sub></th><th>÷ √2</th><th>softmax</th></tr></thead>
+      <tbody>
+        <tr><td>1</td><td>(1, 0)</td><td>(1, 0)</td><td>2</td><td>1.41</td><td class="reveal">0.25</td></tr>
+        <tr><td>2</td><td>(0, 2)</td><td>(0, 1)</td><td>2</td><td>1.41</td><td class="reveal">0.25</td></tr>
+        <tr><td>3</td><td>(1, 1)</td><td>(1, 1)</td><td>3</td><td>2.12</td><td class="reveal">0.50</td></tr>
+      </tbody>
+    </table></div>
+    <p>Output = 0.25·(1,0) + 0.25·(0,1) + 0.50·(1,1) = <span class="reveal"><b>(0.75, 0.75)</b></span>. The third pair matches best, so its value dominates – but the others still contribute.</p>
+
+    <h3>The pipeline (Figure 2, left)</h3>
+    <p>Click a step.</p>
+    <figure>
+      <div class="arch wide">
+        <svg id="pipesvg" viewBox="0 0 300 440" role="img" aria-label="Pipeline: MatMul Q K, scale, mask, softmax, MatMul with V">
+          <defs><marker id="pu" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--faint)"/></marker></defs>
+          <path class="flow" marker-end="url(#pu)" d="M150,376 V356 M150,318 V298 M150,260 V240 M150,202 V182 M150,144 V124 M150,86 V64"/>
+          <text class="note" x="150" y="20" text-anchor="middle">Output: n × d_v</text>
+          <text class="note" x="150" y="432" text-anchor="middle">from the layer input (projections, see 2.3)</text>
+        </svg>
+        <div class="arch-panel" id="pipepanel" aria-live="polite">
+          <p class="label">Step</p>
+          <h3>Click a step</h3>
+          <p class="small muted">Read from the bottom up. Everything here is one matrix operation – no learned parameters except the projections that produce Q, K and V.</p>
+        </div>
+      </div>
+      <figcaption>Own drawing after Figure 2 (left). “Mask (opt.)” is only used where attention must not look ahead – see 2.2.5.</figcaption>
+    </figure>
+  </section>
+
+  <section id="softmax">
+    <h2><span class="num">2.2.3</span>Dot product as compatibility, softmax as weighting</h2>
+    <p>The dot product <math><mi>q</mi><mo>·</mo><mi>k</mi><mo>=</mo><msub><mo>∑</mo><mi>i</mi></msub><msub><mi>q</mi><mi>i</mi></msub><msub><mi>k</mi><mi>i</mi></msub></math> is large when the two vectors point in a similar direction: it is the compatibility measure. The softmax then turns the raw scores into weights:</p>
+    <div class="fml">
+      <math display="block"><msub><mi>α</mi><mi>j</mi></msub><mo>=</mo><mfrac><msup><mi>e</mi><msub><mi>s</mi><mi>j</mi></msub></msup><mrow><msub><mo>∑</mo><mi>l</mi></msub><msup><mi>e</mi><msub><mi>s</mi><mi>l</mi></msub></msup></mrow></mfrac><mo>,</mo><mspace width="1em"/><mtext>output</mtext><mo>=</mo><msub><mo>∑</mo><mi>j</mi></msub><msub><mi>α</mi><mi>j</mi></msub><msub><mi>v</mi><mi>j</mi></msub></math>
+      <span class="cap">All α<sub>j</sub> &gt; 0 and Σα<sub>j</sub> = 1 – the output is a convex combination of the values.</span>
+    </div>
+    <p>Two properties matter in practice:</p>
+    <ul>
+      <li>Only <b>differences</b> between scores count – adding a constant to all scores changes nothing.</li>
+      <li>The whole thing is <b>one matrix multiplication</b> for all queries at once: fast and memory-efficient on GPUs, which is exactly why this variant is used (2.2.6).</li>
+    </ul>
+  </section>
+
+  <section id="scaling">
+    <h2><span class="num">2.2.4</span>Why divide by √d<sub>k</sub></h2>
+    <p>Assume the components of <i>q</i> and <i>k</i> are independent with mean 0 and variance 1. Then</p>
+    <div class="fml">
+      <math display="block"><mi>q</mi><mo>·</mo><mi>k</mi><mo>=</mo><munderover><mo>∑</mo><mrow><mi>i</mi><mo>=</mo><mn>1</mn></mrow><msub><mi>d</mi><mi>k</mi></msub></munderover><msub><mi>q</mi><mi>i</mi></msub><msub><mi>k</mi><mi>i</mi></msub><mo>,</mo><mspace width="1em"/><mtext>mean</mtext><mo>=</mo><mn>0</mn><mo>,</mo><mspace width="0.6em"/><mtext>variance</mtext><mo>=</mo><msub><mi>d</mi><mi>k</mi></msub></math>
+      <span class="cap">Footnote 4 of the paper. Typical magnitude of a score therefore grows like √d<sub>k</sub> – with d<sub>k</sub> = 64 that is already ±8.</span>
+    </div>
+    <p>Large scores push the softmax into a <b>saturated</b> region: one weight goes to ≈ 1, all others to ≈ 0, and its gradients become extremely small – the layer barely learns. Dividing by √d<sub>k</sub> brings the variance back to ≈ 1, regardless of head size.</p>
+    <figure>
+      <div class="fig-toolbar">
+        <b class="grow">Same five key matches, growing d<sub>k</sub></b>
+        <button class="iconbtn" id="scalebtn" aria-pressed="true">Scaling on</button>
+        <button class="iconbtn" id="maskbtn" aria-pressed="false">Mask last two</button>
+      </div>
+      <div class="ctrl"><label for="dk">d<sub>k</sub></label><input type="range" id="dk" min="2" max="512" step="2" value="64"><output id="dkout">64</output></div>
+      <div class="bars" id="bars"></div>
+      <p class="small" id="scalenote" style="margin:.9rem 0 0"></p>
+      <figcaption>The per-dimension match between the query and each key is held fixed; only d<sub>k</sub> changes, so the raw scores scale with √d<sub>k</sub>. Without scaling the distribution collapses onto one key as d<sub>k</sub> grows; with scaling it stays the same at every d<sub>k</sub>.</figcaption>
+    </figure>
+    <div class="box exam"><b>Common trap:</b> the division is <i>not</i> what makes the weights sum to 1 – the softmax does that on its own. And it is not a normalisation of the vectors either. It is purely about keeping the <b>variance of the scores</b> at ≈ 1 so the softmax keeps usable gradients.</div>
+  </section>
+
+  <section id="mask">
+    <h2><span class="num">2.2.5</span>Masking inside the attention</h2>
+    <p>Sometimes a query must not see certain positions: future tokens in the decoder (2.1.4) or padding in a batch. The trick sits <b>between scaling and softmax</b>: the forbidden scores are set to <b>−∞</b>. Since <math><msup><mi>e</mi><mrow><mo>−</mo><mi>∞</mi></mrow></msup><mo>=</mo><mn>0</mn></math>, those weights become exactly 0 and the remaining weights still sum to 1.</p>
+    <p class="small muted">Try the “Mask last two” button in the figure above: the weights of the masked keys drop to 0 and the rest are redistributed.</p>
+  </section>
+
+  <section id="additive">
+    <h2><span class="num">2.2.6</span>Dot-product vs additive attention</h2>
+    <div class="tablewrap"><table>
+      <thead><tr><th></th><th>Additive (Bahdanau, 1.2)</th><th>Dot-product (here)</th></tr></thead>
+      <tbody>
+        <tr><td>Compatibility</td><td class="reveal">Small feed-forward net with one hidden layer</td><td class="reveal">Plain dot product q·k</td></tr>
+        <tr><td>Theoretical complexity</td><td class="reveal">Similar</td><td class="reveal">Similar</td></tr>
+        <tr><td>In practice</td><td class="reveal">Slower, more memory</td><td class="reveal">Much faster: one optimised matrix multiplication</td></tr>
+        <tr><td>Small d<sub>k</sub></td><td class="reveal">On par</td><td class="reveal">On par</td></tr>
+        <tr><td>Large d<sub>k</sub></td><td class="reveal">Better than <i>unscaled</i> dot-product attention</td><td class="reveal">Needs the 1/√d<sub>k</sub> scaling to keep up</td></tr>
+      </tbody>
+    </table></div>
+    <p>So the “scaled” in the name is exactly the fix that makes the fast variant work at the head sizes the Transformer uses.</p>
+  </section>
+
+  <section id="questions">
+    <h2>Questions to be able to answer</h2>
+    <div class="box exam" id="tp-questions"></div>
+  </section>
+
+  <section id="keypoints">
+    <h2>Key points &amp; progress</h2>
+    <p class="muted small">Your agent checks these when you explain the topic. In self-test mode the model answers are blurred (click to reveal).</p>
+    <div class="kps" id="tp-keypoints"></div>
+  </section>
+
+  <section id="log">
+    <h2>Check log</h2>
+    <div class="card" id="tp-log"></div>
+  </section>
+</article>
+
+<aside class="side">
+  <div class="card" id="tp-status"></div>
+  <div class="card small">
+    <p class="label">Start a check</p>
+    Tell your agent: <code>Check me on 2.2</code> and explain the topic freely. Single point: <code>Check me on 2.2.4</code>.
+  </div>
+  <nav class="card">
+    <p class="label">Contents</p>
+    <a href="#summary">The gist</a>
+    <a href="#qkv">2.2.1 Query, key, value</a>
+    <a href="#formula">2.2.2 The formula</a>
+    <a href="#softmax">2.2.3 Dot product &amp; softmax</a>
+    <a href="#scaling">2.2.4 Why √d<sub>k</sub></a>
+    <a href="#mask">2.2.5 Masking</a>
+    <a href="#additive">2.2.6 vs additive attention</a>
+    <a href="#keypoints">Key points</a>
+    <a href="#log">Check log</a>
+  </nav>
+</aside>
+</div>
+
+<script src="../data/progress.js"></script>
+<script src="../assets/app.js"></script>
+<script>
+(function () {
+  const svgNS = "http://www.w3.org/2000/svg";
+
+  // ---------- Pipeline diagram ----------
+  const X = 50, W = 200;
+  const STEPS = [
+    { y: 376, label: "Q, K, V", fill: "--card", kp: "2.2.1", what: "One query, key and value row per position.",
+      more: "Linear projections of the layer input (topic 2.3)." },
+    { y: 318, label: "MatMul  Q·Kᵀ", fill: "--blk-attn", kp: "2.2.2", what: "Score matrix n × m: every query against every key.",
+      more: "One dot product per pair – done in a single matrix multiplication." },
+    { y: 260, label: "Scale  ÷ √d_k", fill: "--blk-norm", kp: "2.2.4", what: "Divide all scores by √d_k.",
+      more: "Keeps the variance of the scores at ≈ 1 so the softmax does not saturate." },
+    { y: 202, label: "Mask (opt.)", fill: "--blk-norm", kp: "2.2.5", what: "Forbidden positions are set to −∞.",
+      more: "Future positions in the decoder, padding in a batch." },
+    { y: 144, label: "SoftMax", fill: "--blk-out", kp: "2.2.3", what: "Row-wise: scores → weights that sum to 1.",
+      more: "Only differences between scores matter." },
+    { y: 86, label: "MatMul  ·V", fill: "--blk-attn", kp: "2.2.2", what: "Weighted sum of the value rows.",
+      more: "Result: one output vector of size d_v per query." }
+  ];
+  const svg = document.getElementById("pipesvg"), panel = document.getElementById("pipepanel");
+  let quiz = false;
+  STEPS.forEach((b, i) => {
+    const g = document.createElementNS(svgNS, "g");
+    g.setAttribute("class", "blk"); g.setAttribute("tabindex", "0"); g.setAttribute("role", "button");
+    g.innerHTML = `<rect x="${X}" y="${b.y}" width="${W}" height="38" rx="8" fill="var(${b.fill})"/><text x="${X + W / 2}" y="${b.y + 24}" text-anchor="middle"></text>`;
+    b.el = g; b.nr = i + 1;
+    const show = () => {
+      STEPS.forEach((x) => x.el.classList.remove("on")); g.classList.add("on");
+      b.revealed = true; label(b);
+      const k = ETL.keypoint(b.kp);
+      panel.innerHTML = `<p class="label">Step ${b.nr}</p><h3>${ETL.esc(b.label)}</h3>
+        <p><b>What happens:</b> ${ETL.esc(b.what)}</p>${b.more ? `<p class="small">${ETL.esc(b.more)}</p>` : ""}
+        ${k ? `<p class="small"><a href="#kp-${k.id}"><span class="kid">${k.id}</span>${ETL.esc(k.title)}</a> ${ETL.badge(k.status)}</p>` : ""}`;
+      if (innerWidth < 720) panel.scrollIntoView({ block: "nearest", behavior: "smooth" });
+    };
+    g.addEventListener("click", show);
+    g.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); show(); } });
+    svg.appendChild(g); label(b);
+  });
+  function label(b) {
+    const t = b.el.querySelector("text"), hide = quiz && !b.revealed;
+    t.textContent = hide ? `${b.nr}  ?` : b.label;
+    t.classList.toggle("hidden-label", hide);
+  }
+
+  // ---------- Self-test ----------
+  const qb = document.getElementById("quizbtn");
+  qb.addEventListener("click", () => {
+    quiz = !quiz; qb.setAttribute("aria-pressed", quiz);
+    document.body.classList.toggle("quiz-hide", quiz);
+    STEPS.forEach((b) => { b.revealed = false; b.el.classList.remove("on"); label(b); });
+    panel.innerHTML = quiz ? `<p class="label">Self-test</p><h3>Name steps 1–${STEPS.length}</h3><p class="small muted">Say what each step does, then click to check.</p>`
+      : `<p class="label">Step</p><h3>Click a step</h3>`;
+  });
+  document.addEventListener("click", (e) => { const r = e.target.closest(".quiz-hide .reveal"); if (r) r.classList.remove("reveal"); });
+
+  // ---------- Scaling playground ----------
+  // Per-dimension match between the query and each key (mean of q_i·k_i). Fixed, so only d_k varies.
+  const KEYS = ["the", "cat", "sat", "on", "mat"], UNIT = [0.35, 0.95, 0.15, -0.25, 0.55];
+  const dk = document.getElementById("dk"), dkout = document.getElementById("dkout"),
+        bars = document.getElementById("bars"), note = document.getElementById("scalenote"),
+        sbtn = document.getElementById("scalebtn"), mbtn = document.getElementById("maskbtn");
+  let scaled = true, masked = false;
+
+  function draw() {
+    const d = +dk.value, root = Math.sqrt(d);
+    dkout.textContent = d;
+    // raw score ≈ unit match × √d_k (variance of a dot product of d_k dimensions grows with d_k)
+    const raw = UNIT.map((u) => u * root);
+    const s = raw.map((x, i) => (masked && i >= KEYS.length - 2) ? -Infinity : (scaled ? x / root : x));
+    const mx = Math.max(...s), ex = s.map((x) => Math.exp(x - mx)), sum = ex.reduce((a, b) => a + b, 0);
+    const w = ex.map((x) => x / sum);
+    bars.innerHTML = KEYS.map((t, i) => `<div class="bar"><span>${t}</span>
+      <span class="track"><span class="fill" style="width:${(w[i] * 100).toFixed(1)}%"></span></span>
+      <output>${(w[i] * 100).toFixed(1)} %</output></div>`).join("");
+    const top = Math.max(...w);
+    note.innerHTML = `Raw scores q·k: <code>${raw.map((x) => x.toFixed(1)).join(", ")}</code> → after ${scaled ? "÷ √d_k" : "no scaling"}: <code>${s.map((x) => x === -Infinity ? "−∞" : x.toFixed(1)).join(", ")}</code>.
+      Largest weight: <b>${(top * 100).toFixed(1)} %</b>. ${!scaled && top > 0.9
+        ? "The softmax is saturated – almost one-hot, gradients ≈ 0."
+        : scaled ? "Stays the same for every d_k – that is the point of the scaling." : ""}`;
+  }
+  dk.addEventListener("input", draw);
+  sbtn.addEventListener("click", () => { scaled = !scaled; sbtn.setAttribute("aria-pressed", scaled); sbtn.textContent = scaled ? "Scaling on" : "Scaling off"; draw(); });
+  mbtn.addEventListener("click", () => { masked = !masked; mbtn.setAttribute("aria-pressed", masked); draw(); });
+  draw();
+})();
+</script>
+</body>
+</html>

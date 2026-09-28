@@ -1,0 +1,313 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>2.4 Sinusoidal positional encoding · Explain to learn</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body data-topic="2.4" data-root="../">
+<header class="topbar"><div class="wrap">
+  <a class="brand" href="../index.html">Explain <span>to learn</span></a>
+  <span class="crumbs">/ 2 Attention Is All You Need / <b>2.4 Positional encoding</b></span>
+  <span class="spacer"></span>
+  <button class="iconbtn" id="quizbtn" aria-pressed="false" title="Hide answers to test yourself">Self-test</button>
+  <button class="iconbtn" data-action="theme" title="Toggle light/dark" aria-label="Toggle light/dark">◐</button>
+</div></header>
+
+<div class="wrap page">
+<article>
+  <h1><span class="num">2.4</span>Sinusoidal positional encoding</h1>
+  <p class="lead">How the Transformer learns word order without recurrence – Section 3.5 of <a href="https://arxiv.org/abs/1706.03762">Vaswani et al. (2017)</a>, plus Table 3 row (E) and the dropout note in Section 5.4. Where it enters the model: <a href="2.1-model-architecture.html#pe">2.1.7</a>.</p>
+
+  <section id="summary">
+    <div class="box check">
+      <p class="label">The gist in 60 seconds</p>
+      <ol>
+        <li>Attention by itself <b>ignores order</b>: shuffle the input and every token gets the same result, just shuffled.</li>
+        <li>Fix: <b>add</b> a position vector of size d<sub>model</sub> to every token embedding, at the bottom of <b>both</b> stacks.</li>
+        <li>The vector is <b>fixed, not learned</b>: dimension pair <i>i</i> is a sine/cosine of the position with its own frequency.</li>
+        <li>Frequencies form a <b>geometric series</b>: wavelengths from 2π to 10000·2π – fast “second hands” to slow “hour hands”.</li>
+        <li>Shifting by <i>k</i> positions = a fixed <b>rotation</b> of every pair → the model can easily attend by <b>relative</b> position.</li>
+        <li>Learned position embeddings work <b>just as well</b> (Table 3 E); sinusoids were chosen because they <b>might extrapolate</b> to longer sequences.</li>
+      </ol>
+    </div>
+  </section>
+
+  <section id="why">
+    <h2><span class="num">2.4.1</span>Why positions are needed</h2>
+    <p>An RNN reads tokens one after another, so order is built in. A CNN sees local neighbourhoods. Self-attention has neither: each output is a weighted sum over <i>all</i> positions, and the weights depend only on the <i>contents</i> of query and key (see <a href="2.2-scaled-dot-product-attention.html">2.2</a>).</p>
+    <p>Consequence: if you permute the input tokens, the outputs are permuted in exactly the same way, but otherwise unchanged. “dog bites man” and “man bites dog” would produce the same set of vectors. The paper: “Since our model contains no recurrence and no convolution, in order for the model to make use of the order of the sequence, we must inject some information about the relative or absolute position of the tokens” (Section 3.5).</p>
+    <figure>
+      <div class="fig-toolbar"><b class="grow">Without position information, order is invisible</b>
+        <button class="iconbtn" id="shufbtn">Shuffle</button>
+        <button class="iconbtn" id="pebtn" aria-pressed="false">Add positions</button></div>
+      <div id="perm" class="tablewrap"></div>
+      <figcaption>Toy self-attention: 1-dimensional “embeddings”, the output for each token is its attention-weighted average. Shuffle the input: without positions, every word keeps exactly its output value. With positions added, the outputs change with the order.</figcaption>
+    </figure>
+  </section>
+
+  <section id="add">
+    <h2><span class="num">2.4.2</span>How the encoding enters the model</h2>
+    <ul>
+      <li>The positional encoding has the <b>same dimension d<sub>model</sub></b> = 512 as the embeddings, “so that the two can be summed”.</li>
+      <li>It is <b>added</b>, element-wise – not concatenated. The input to the first layer is <math><msub><mi>x</mi><mtext>pos</mtext></msub><mo>=</mo><mi>Embedding</mi><mo>(</mo><msub><mtext>token</mtext><mtext>pos</mtext></msub><mo>)</mo><mo>+</mo><msub><mi>PE</mi><mtext>pos</mtext></msub></math>.</li>
+      <li>This happens once, <b>at the bottom of the encoder and of the decoder</b> stack. Higher layers get position information only through what flows up the residual connections.</li>
+      <li>Dropout (P<sub>drop</sub> = 0.1 in the base model) is applied to this <b>sum</b> (Section 5.4).</li>
+    </ul>
+    <div class="box tip"><b>Side note:</b> the embeddings are multiplied by √d<sub>model</sub> before the sum (Section 3.4, see 2.1.6). The paper does not say why; a common reading is that it keeps the learned embeddings from being small next to the PE values, which lie in [−1, 1].</div>
+  </section>
+
+  <section id="formula">
+    <h2><span class="num">2.4.3</span>The formula</h2>
+    <div class="fml">
+      <math display="block"><mtable columnalign="right left"><mtr><mtd><msub><mi>PE</mi><mrow><mo>(</mo><mi>pos</mi><mo>,</mo><mn>2</mn><mi>i</mi><mo>)</mo></mrow></msub></mtd><mtd><mo>=</mo><mi>sin</mi><mo>(</mo><mi>pos</mi><mo>/</mo><msup><mn>10000</mn><mrow><mn>2</mn><mi>i</mi><mo>/</mo><msub><mi>d</mi><mtext>model</mtext></msub></mrow></msup><mo>)</mo></mtd></mtr><mtr><mtd><msub><mi>PE</mi><mrow><mo>(</mo><mi>pos</mi><mo>,</mo><mn>2</mn><mi>i</mi><mo>+</mo><mn>1</mn><mo>)</mo></mrow></msub></mtd><mtd><mo>=</mo><mi>cos</mi><mo>(</mo><mi>pos</mi><mo>/</mo><msup><mn>10000</mn><mrow><mn>2</mn><mi>i</mi><mo>/</mo><msub><mi>d</mi><mtext>model</mtext></msub></mrow></msup><mo>)</mo></mtd></mtr></mtable></math>
+      <span class="cap">pos = position in the sequence (0, 1, 2, …). Even dimensions 2<i>i</i> get a sine, odd dimensions 2<i>i</i>+1 a cosine, and both members of a pair share the same frequency <i>ω<sub>i</sub></i> = 1 / 10000<sup>2i/d<sub>model</sub></sup>.</span>
+    </div>
+    <p class="small muted">The paper writes “<i>i</i> is the dimension”. Strictly, <i>i</i> counts dimension <b>pairs</b> (0 … d<sub>model</sub>/2 − 1); 2<i>i</i> and 2<i>i</i>+1 are the actual dimensions.</p>
+
+    <h3>Worked example (d<sub>model</sub> = 4)</h3>
+    <p>Two pairs: <i>i</i> = 0 with ω<sub>0</sub> = 1, and <i>i</i> = 1 with ω<sub>1</sub> = 1/10000<sup>2/4</sup> = 1/100.</p>
+    <div class="tablewrap"><table>
+      <thead><tr><th>pos</th><th>sin(pos)</th><th>cos(pos)</th><th>sin(pos/100)</th><th>cos(pos/100)</th></tr></thead>
+      <tbody>
+        <tr><td>0</td><td>0</td><td>1</td><td>0</td><td>1</td></tr>
+        <tr><td>1</td><td class="reveal">0.841</td><td class="reveal">0.540</td><td class="reveal">0.010</td><td class="reveal">1.000</td></tr>
+        <tr><td>2</td><td class="reveal">0.909</td><td class="reveal">−0.416</td><td class="reveal">0.020</td><td class="reveal">1.000</td></tr>
+      </tbody>
+    </table></div>
+    <p>The first pair changes a lot from one position to the next, the second barely moves – that is the frequency spread in miniature.</p>
+
+    <figure>
+      <div class="fig-toolbar"><b class="grow">The whole encoding at once</b><span class="small muted">Hover for values</span></div>
+      <div class="ctrl"><label for="hmd">d<sub>model</sub></label><input type="range" id="hmd" min="16" max="512" step="16" value="128"><output id="hmdout">128</output></div>
+      <div class="ctrl"><label for="hmp">positions</label><input type="range" id="hmp" min="10" max="200" step="10" value="100"><output id="hmpout">100</output></div>
+      <div class="pe-wrap"><canvas id="heat" aria-label="Heatmap of the positional encoding: rows are positions, columns are dimensions"></canvas><div class="tooltip" id="tip"></div></div>
+      <div class="legend-ramp"><span>−1</span><i></i><span>+1</span><span style="margin-left:auto">rows: position ↓ · columns: dimension →</span></div>
+      <figcaption>Every row is one position vector PE<sub>pos</sub>. Left columns (small <i>i</i>) flip quickly from row to row; right columns change so slowly that they look constant over 100 positions. Each row is a unique pattern.</figcaption>
+    </figure>
+  </section>
+
+  <section id="freq">
+    <h2><span class="num">2.4.4</span>Frequencies and wavelengths</h2>
+    <p>“Each dimension of the positional encoding corresponds to a sinusoid. The wavelengths form a geometric progression from 2π to 10000 · 2π” (Section 3.5). The wavelength of pair <i>i</i> is</p>
+    <div class="fml">
+      <math display="block"><msub><mi>λ</mi><mi>i</mi></msub><mo>=</mo><mfrac><mrow><mn>2</mn><mi>π</mi></mrow><msub><mi>ω</mi><mi>i</mi></msub></mfrac><mo>=</mo><mn>2</mn><mi>π</mi><mo>·</mo><msup><mn>10000</mn><mrow><mn>2</mn><mi>i</mi><mo>/</mo><msub><mi>d</mi><mtext>model</mtext></msub></mrow></msup></math>
+      <span class="cap"><i>i</i> = 0 → λ = 2π ≈ 6.3 positions. Towards the last pair, λ approaches 10000 · 2π ≈ 62 832 positions. Each step in <i>i</i> multiplies λ by the same factor.</span>
+    </div>
+    <p>Intuition: a clock with many hands. The fast hands tell neighbouring positions apart, but repeat after a few steps; the slow hands disambiguate far-apart positions. Together they give every position a distinct, bounded fingerprint – values always stay in [−1, 1], however long the sequence.</p>
+    <figure>
+      <div class="fig-toolbar"><b class="grow">One pair across positions</b></div>
+      <div class="ctrl"><label for="lni">pair <i>i</i></label><input type="range" id="lni" min="0" max="255" step="1" value="40"><output id="lniout">40</output></div>
+      <div class="pe-lines"><svg id="lines" viewBox="0 0 600 210" role="img" aria-label="Sine and cosine of the selected pair over positions 0 to 100"></svg></div>
+      <p class="small" id="lninote" style="margin:.4rem 0 0"></p>
+      <figcaption>d<sub>model</sub> = 512, positions 0–100. Solid: sin (dimension 2<i>i</i>), dashed: cos (2<i>i</i>+1), faint: pair 0 for comparison.</figcaption>
+    </figure>
+  </section>
+
+  <section id="relative">
+    <h2><span class="num">2.4.5</span>Relative positions: a shift is a rotation</h2>
+    <p>The authors chose sinusoids because they “hypothesized it would allow the model to easily learn to attend by relative positions, since for any fixed offset <i>k</i>, PE<sub>pos+k</sub> can be represented as a linear function of PE<sub>pos</sub>”. For one pair with frequency ω, the angle-sum identities give:</p>
+    <div class="fml">
+      <math display="block"><mrow><mo>(</mo><mtable><mtr><mtd><mi>sin</mi><mo>(</mo><mi>ω</mi><mo>(</mo><mi>pos</mi><mo>+</mo><mi>k</mi><mo>)</mo><mo>)</mo></mtd></mtr><mtr><mtd><mi>cos</mi><mo>(</mo><mi>ω</mi><mo>(</mo><mi>pos</mi><mo>+</mo><mi>k</mi><mo>)</mo><mo>)</mo></mtd></mtr></mtable><mo>)</mo></mrow><mo>=</mo><mrow><mo>(</mo><mtable><mtr><mtd><mi>cos</mi><mo>(</mo><mi>ω</mi><mi>k</mi><mo>)</mo></mtd><mtd><mi>sin</mi><mo>(</mo><mi>ω</mi><mi>k</mi><mo>)</mo></mtd></mtr><mtr><mtd><mo>−</mo><mi>sin</mi><mo>(</mo><mi>ω</mi><mi>k</mi><mo>)</mo></mtd><mtd><mi>cos</mi><mo>(</mo><mi>ω</mi><mi>k</mi><mo>)</mo></mtd></mtr></mtable><mo>)</mo></mrow><mrow><mo>(</mo><mtable><mtr><mtd><mi>sin</mi><mo>(</mo><mi>ω</mi><mi>pos</mi><mo>)</mo></mtd></mtr><mtr><mtd><mi>cos</mi><mo>(</mo><mi>ω</mi><mi>pos</mi><mo>)</mo></mtd></mtr></mtable><mo>)</mo></mrow></math>
+      <span class="cap">The matrix is a rotation by the angle ωk. It depends only on the offset <i>k</i>, <b>not</b> on pos. Stacking one such 2×2 block per pair gives a single matrix M<sub>k</sub> with PE<sub>pos+k</sub> = M<sub>k</sub> PE<sub>pos</sub>.</span>
+    </div>
+    <figure>
+      <div class="fig-toolbar"><b class="grow">Same offset, same rotation – wherever you start</b></div>
+      <div class="ctrl"><label for="rpos">pos</label><input type="range" id="rpos" min="0" max="60" step="1" value="3"><output id="rposout">3</output></div>
+      <div class="ctrl"><label for="rk">offset <i>k</i></label><input type="range" id="rk" min="0" max="10" step="1" value="2"><output id="rkout">2</output></div>
+      <div class="ctrl"><label for="ri">pair <i>i</i></label><input type="range" id="ri" min="0" max="40" step="1" value="4"><output id="riout">4</output></div>
+      <div class="arch"><svg id="rot" viewBox="-130 -130 260 260" role="img" aria-label="Unit circle showing PE at pos and at pos plus k for one dimension pair" style="max-width:17rem;width:100%"></svg>
+        <div class="arch-panel small" id="rotnote"></div></div>
+      <figcaption>d<sub>model</sub> = 512. The point is the pair (sin ωpos, cos ωpos) on the unit circle. Move <i>pos</i>: both points travel, but the arc between them stays the same.</figcaption>
+    </figure>
+    <div class="box tip"><b>Beyond the paper, but helpful:</b> since sin·sin + cos·cos = cos(difference), the dot product <math><msub><mi>PE</mi><mi>pos</mi></msub><mo>·</mo><msub><mi>PE</mi><mrow><mi>pos</mi><mo>+</mo><mi>k</mi></mrow></msub><mo>=</mo><msub><mo>∑</mo><mi>i</mi></msub><mi>cos</mi><mo>(</mo><msub><mi>ω</mi><mi>i</mi></msub><mi>k</mi><mo>)</mo></math> also depends only on <i>k</i>. The paper states only the linear-function property and calls the benefit a hypothesis.</div>
+  </section>
+
+  <section id="learned">
+    <h2><span class="num">2.4.6</span>Sinusoids vs learned position embeddings</h2>
+    <p>The alternative is a learned lookup table with one trainable vector per position. The paper tried it:</p>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Model (Table 3, dev set)</th><th>PPL</th><th>BLEU</th></tr></thead>
+      <tbody>
+        <tr><td>base, sinusoids</td><td>4.92</td><td>25.8</td></tr>
+        <tr><td>(E) learned positional embedding</td><td>4.92</td><td>25.7</td></tr>
+      </tbody>
+    </table></div>
+    <p>“Nearly identical results”. So the choice was not about quality:</p>
+    <div class="tablewrap"><table>
+      <thead><tr><th></th><th>Sinusoidal</th><th>Learned</th></tr></thead>
+      <tbody>
+        <tr><td>Parameters</td><td class="reveal">None – computed by formula</td><td class="reveal">One d<sub>model</sub> vector per position</td></tr>
+        <tr><td>Longer sequences than in training</td><td class="reveal">Formula works for any pos – <i>may</i> extrapolate (the paper's reason for choosing it)</td><td class="reveal">No vector exists beyond the maximum training length</td></tr>
+        <tr><td>Quality in the paper</td><td class="reveal">25.8 BLEU</td><td class="reveal">25.7 BLEU – practically the same</td></tr>
+      </tbody>
+    </table></div>
+    <p class="small muted">Note the wording: the paper says sinusoids “may allow the model to extrapolate”. It does not test this.</p>
+  </section>
+
+  <section id="questions">
+    <h2>Questions to be able to answer</h2>
+    <div class="box exam" id="tp-questions"></div>
+  </section>
+
+  <section id="keypoints">
+    <h2>Key points &amp; progress</h2>
+    <p class="muted small">Your agent checks these when you explain the topic. In self-test mode the model answers are blurred (click to reveal).</p>
+    <div class="kps" id="tp-keypoints"></div>
+  </section>
+
+  <section id="log">
+    <h2>Check log</h2>
+    <div class="card" id="tp-log"></div>
+  </section>
+</article>
+
+<aside class="side">
+  <div class="card" id="tp-status"></div>
+  <div class="card small">
+    <p class="label">Start a check</p>
+    Tell your agent: <code>Check me on 2.4</code> and explain the topic freely. Single point: <code>Check me on 2.4.5</code>.
+  </div>
+  <nav class="card">
+    <p class="label">Contents</p>
+    <a href="#summary">The gist</a>
+    <a href="#why">2.4.1 Why positions</a>
+    <a href="#add">2.4.2 How it enters</a>
+    <a href="#formula">2.4.3 Formula &amp; heatmap</a>
+    <a href="#freq">2.4.4 Wavelengths</a>
+    <a href="#relative">2.4.5 Shift = rotation</a>
+    <a href="#learned">2.4.6 vs learned</a>
+    <a href="#keypoints">Key points</a>
+    <a href="#log">Check log</a>
+  </nav>
+</aside>
+</div>
+
+<script src="../data/progress.js"></script>
+<script src="../assets/app.js"></script>
+<script>
+(function () {
+  const svgNS = "http://www.w3.org/2000/svg";
+  const $ = (id) => document.getElementById(id);
+  const omega = (i, d) => 1 / Math.pow(10000, (2 * i) / d);
+  const pe = (pos, dim, d) => { const w = omega(Math.floor(dim / 2), d); return dim % 2 ? Math.cos(pos * w) : Math.sin(pos * w); };
+  const css = (v) => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+
+  // ---------- Self-test ----------
+  const qb = $("quizbtn");
+  qb.addEventListener("click", () => {
+    const on = qb.getAttribute("aria-pressed") !== "true";
+    qb.setAttribute("aria-pressed", on);
+    document.body.classList.toggle("quiz-hide", on);
+  });
+  document.addEventListener("click", (e) => { const r = e.target.closest(".quiz-hide .reveal"); if (r) r.classList.remove("reveal"); });
+
+  // ---------- 2.4.1 Permutation demo ----------
+  // 1-d toy: score = x_q * x_k, output = softmax-weighted average of x. Position term: small sinusoid.
+  const WORDS = { dog: 0.9, bites: -0.4, man: 0.5 };
+  let order = ["dog", "bites", "man"], withPos = false;
+  function attend(xs) {
+    return xs.map((q) => {
+      const s = xs.map((k) => q * k), m = Math.max(...s), e = s.map((x) => Math.exp(x - m)), z = e.reduce((a, b) => a + b, 0);
+      return e.reduce((a, w, j) => a + (w / z) * xs[j], 0);
+    });
+  }
+  function drawPerm() {
+    const xs = order.map((w, p) => WORDS[w] + (withPos ? Math.sin(p * 1.3) : 0));
+    const out = attend(xs);
+    $("perm").innerHTML = `<table><thead><tr><th>pos</th><th>token</th><th>input</th><th>output</th></tr></thead><tbody>
+      ${order.map((w, p) => `<tr><td>${p}</td><td><b>${w}</b></td><td>${xs[p].toFixed(2)}${withPos ? ` <span class="small muted">(${WORDS[w].toFixed(2)} + ${Math.sin(p * 1.3).toFixed(2)})</span>` : ""}</td><td><b>${out[p].toFixed(3)}</b></td></tr>`).join("")}
+      </tbody></table>`;
+  }
+  $("shufbtn").addEventListener("click", () => {
+    const rot = [[1, 2, 0], [2, 0, 1], [0, 2, 1], [1, 0, 2]][Math.floor(Math.random() * 4)];
+    order = rot.map((i) => order[i]); drawPerm();
+  });
+  $("pebtn").addEventListener("click", (e) => { withPos = !withPos; e.target.setAttribute("aria-pressed", withPos); drawPerm(); });
+  drawPerm();
+
+  // ---------- 2.4.3 Heatmap ----------
+  const canvas = $("heat"), ctx = canvas.getContext("2d"), tip = $("tip");
+  const NEG = [0xd0, 0x3b, 0x3b], MID = [0xf0, 0xef, 0xec], POS = [0x2a, 0x78, 0xd6];
+  const mix = (a, b, t) => a.map((x, j) => Math.round(x + (b[j] - x) * t));
+  const color = (v) => (v < 0 ? mix(MID, NEG, -v) : mix(MID, POS, v));
+  function drawHeat() {
+    const D = +$("hmd").value, P = +$("hmp").value;
+    $("hmdout").textContent = D; $("hmpout").textContent = P;
+    canvas.width = D; canvas.height = P;
+    const img = ctx.createImageData(D, P);
+    for (let p = 0; p < P; p++) for (let d = 0; d < D; d++) {
+      const c = color(pe(p, d, D)), o = (p * D + d) * 4;
+      img.data[o] = c[0]; img.data[o + 1] = c[1]; img.data[o + 2] = c[2]; img.data[o + 3] = 255;
+    }
+    ctx.putImageData(img, 0, 0);
+  }
+  canvas.addEventListener("mousemove", (e) => {
+    const r = canvas.getBoundingClientRect(), D = canvas.width, P = canvas.height;
+    const d = Math.min(D - 1, Math.floor(((e.clientX - r.left) / r.width) * D));
+    const p = Math.min(P - 1, Math.floor(((e.clientY - r.top) / r.height) * P));
+    const i = Math.floor(d / 2), lam = (2 * Math.PI) / omega(i, D);
+    tip.innerHTML = `pos <b>${p}</b> · dim <b>${d}</b> (${d % 2 ? "cos" : "sin"}, pair i = ${i})<br>value <b>${pe(p, d, D).toFixed(3)}</b> · wavelength ${lam < 1000 ? lam.toFixed(1) : Math.round(lam).toLocaleString("en")}`;
+    tip.style.display = "block";
+    const x = e.clientX - r.left, y = e.clientY - r.top;
+    tip.style.left = Math.min(x + 12, r.width - tip.offsetWidth - 4) + "px";
+    tip.style.top = (y + 14) + "px";
+  });
+  canvas.addEventListener("mouseleave", () => (tip.style.display = "none"));
+  $("hmd").addEventListener("input", drawHeat); $("hmp").addEventListener("input", drawHeat);
+  drawHeat();
+
+  // ---------- 2.4.4 Line plot ----------
+  const L = { x0: 34, x1: 590, y0: 18, y1: 182, P: 100, D: 512 };
+  const sx = (p) => L.x0 + (p / L.P) * (L.x1 - L.x0), sy = (v) => L.y0 + ((1 - v) / 2) * (L.y1 - L.y0);
+  const path = (f) => { let s = ""; for (let p = 0; p <= L.P; p += 0.25) s += `${s ? "L" : "M"}${sx(p).toFixed(1)},${sy(f(p)).toFixed(1)}`; return s; };
+  function drawLines() {
+    const i = +$("lni").value, w = omega(i, L.D), lam = (2 * Math.PI) / w;
+    $("lniout").textContent = i;
+    let h = `<line class="axis" x1="${L.x0}" x2="${L.x1}" y1="${sy(0)}" y2="${sy(0)}"/>
+      <line class="axis" x1="${L.x0}" x2="${L.x0}" y1="${L.y0}" y2="${L.y1}"/>
+      <text x="${L.x0 - 6}" y="${sy(1) + 4}" text-anchor="end">1</text><text x="${L.x0 - 6}" y="${sy(-1) + 4}" text-anchor="end">−1</text>
+      ${[0, 25, 50, 75, 100].map((p) => `<text x="${sx(p)}" y="200" text-anchor="middle">${p}</text>`).join("")}
+      <path d="${path((p) => Math.sin(p))}" style="stroke:var(--faint);stroke-width:1;opacity:.5"/>
+      <path d="${path((p) => Math.cos(p * w))}" style="stroke:var(--critical);stroke-dasharray:5 4"/>
+      <path d="${path((p) => Math.sin(p * w))}" style="stroke:var(--accent)"/>`;
+    $("lines").innerHTML = h;
+    $("lninote").innerHTML = `Pair <b>${i}</b> = dimensions ${2 * i} and ${2 * i + 1}: ω = ${w < 0.001 ? w.toExponential(2) : w.toFixed(4)}, wavelength <b>${lam < 1000 ? lam.toFixed(1) : Math.round(lam).toLocaleString("en")}</b> positions.
+      ${lam < 20 ? "Fast: separates neighbouring positions, repeats often." : lam > 400 ? "Slow: almost constant over 100 positions – useful to tell far-apart positions apart." : "Medium frequency."}`;
+  }
+  $("lni").addEventListener("input", drawLines);
+  drawLines();
+
+  // ---------- 2.4.5 Rotation ----------
+  const R = 100;
+  function drawRot() {
+    const pos = +$("rpos").value, k = +$("rk").value, i = +$("ri").value, D = 512, w = omega(i, D);
+    $("rposout").textContent = pos; $("rkout").textContent = k; $("riout").textContent = i;
+    // plot (sin, cos) as (x, y), y up
+    const pt = (p) => [R * Math.sin(w * p), -R * Math.cos(w * p)];
+    const [ax, ay] = pt(pos), [bx, by] = pt(pos + k);
+    const ang = w * k, large = (ang % (2 * Math.PI)) > Math.PI ? 1 : 0;
+    const arc = k ? `<path d="M${ax.toFixed(1)},${ay.toFixed(1)} A${R},${R} 0 ${large} 1 ${bx.toFixed(1)},${by.toFixed(1)}" style="stroke:var(--accent);stroke-width:5;fill:none;opacity:.35"/>` : "";
+    $("rot").innerHTML = `<circle r="${R}" style="fill:none;stroke:var(--line);stroke-width:1.5"/>
+      <line x1="-${R + 12}" x2="${R + 12}" y1="0" y2="0" style="stroke:var(--line)"/><line y1="-${R + 12}" y2="${R + 12}" x1="0" x2="0" style="stroke:var(--line)"/>
+      <text x="${R + 6}" y="-4" style="fill:var(--muted);font-size:10px">sin</text><text x="4" y="-${R + 4}" style="fill:var(--muted);font-size:10px">cos</text>
+      ${arc}
+      <line x1="0" y1="0" x2="${ax}" y2="${ay}" style="stroke:var(--faint);stroke-width:1.5"/>
+      <line x1="0" y1="0" x2="${bx}" y2="${by}" style="stroke:var(--accent);stroke-width:1.5"/>
+      <circle cx="${ax}" cy="${ay}" r="6" style="fill:var(--card);stroke:var(--fg);stroke-width:2"/>
+      <circle cx="${bx}" cy="${by}" r="6" style="fill:var(--accent)"/>`;
+    let dot = 0; for (let j = 0; j < D / 2; j++) dot += Math.cos(omega(j, D) * k);
+    const c = Math.cos(ang), s = Math.sin(ang);
+    $("rotnote").innerHTML = `<p><b>Pair ${i}</b> <span class="muted">· ω = ${w.toFixed(4)}</span></p>
+      <p>○ PE<sub>${pos}</sub> = (${Math.sin(w * pos).toFixed(3)}, ${Math.cos(w * pos).toFixed(3)})<br>
+      <span style="color:var(--accent-ink)">●</span> PE<sub>${pos + k}</sub> = (${Math.sin(w * (pos + k)).toFixed(3)}, ${Math.cos(w * (pos + k)).toFixed(3)})</p>
+      <p>Rotation angle ωk = <b>${ang.toFixed(3)}</b> rad<br>M = <code>[[${c.toFixed(3)}, ${s.toFixed(3)}], [${(-s).toFixed(3)}, ${c.toFixed(3)}]]</code></p>
+      <p class="muted">Change <i>pos</i>: angle and matrix stay the same.<br>Full dot product PE<sub>pos</sub>·PE<sub>pos+k</sub> = <b>${dot.toFixed(2)}</b> (also independent of pos).</p>`;
+  }
+  ["rpos", "rk", "ri"].forEach((id) => $(id).addEventListener("input", drawRot));
+  drawRot();
+})();
+</script>
+</body>
+</html>
